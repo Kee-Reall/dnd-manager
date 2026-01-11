@@ -13,6 +13,16 @@ const (
 	Homebrew Edition = "homebrew"
 )
 
+type GameStatus byte
+
+const (
+	Prepared byte = iota
+	InProgress
+	Finished
+	CanceledGame
+	Paused
+)
+
 type Game struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`

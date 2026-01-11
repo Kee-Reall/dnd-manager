@@ -1,25 +1,33 @@
 package domain
 
-type Maker string
-type Role string
+type MakerTag string
+type Role byte
 
 const (
-	TG     Maker = "tg"
-	Player Role  = "player"
-	Master Role  = "master"
-	Admin  Role  = "admin"
+	TG         MakerTag = "tg"
+	NoRole     Role     = 0
+	PlayerRole Role     = 1
+	MasterRole Role     = 2
+	AdminRole  Role     = 3
 )
 
-type UserViewId struct {
-	// Внешний Айди из Вью Системы - В данном случае телеграмма
-	ID string
-	//Метка Вью системы, пока только телеграм
-	Marker Maker
+func (r Role) String() (roleStr string) {
+	switch r {
+	case AdminRole:
+		roleStr = "Admin"
+	case PlayerRole:
+		roleStr = "Player"
+	case MasterRole:
+		roleStr = "Dungeon Master"
+	default:
+		roleStr = "undefined Role"
+	}
+	return
 }
 
 type User struct {
 	ID     string     `json:"-"`
-	ViewId UserViewId `json:"-"`
+	Marker UserMarker `json:"-"`
 	Name   string     `json:"name"`
 	Role   Role       `json:"role"`
 }

@@ -5,7 +5,6 @@ import (
 	"Kee-Reall/dnd-manager/internal/config"
 	"Kee-Reall/dnd-manager/internal/service"
 	"Kee-Reall/dnd-manager/internal/storage/sqlite"
-
 	"log"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -28,7 +27,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	services, err := service.NewContainer(db)
+	services, err := service.NewContainer(db, cfg.AdminChatId)
 	if err != nil {
 		log.Fatal(err)
 	}

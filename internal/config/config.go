@@ -2,23 +2,26 @@ package config
 
 import (
 	"errors"
-	"github.com/joho/godotenv"
 	"os"
+	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	BotToken string
-	DBPath   string
+	BotToken    string
+	DBPath      string
+	AdminChatId int64
 }
 
 func Load() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil {
 		return nil, errors.New("error loading environment")
 	}
-	cfg := Config{
-		BotToken: os.Getenv("BOT_TOKEN"),
-		DBPath:   os.Getenv("DB_PATH"),
+	AdminChatId, err := strconv.Atoi(os.Getenv("ADMIN_CHAT_ID"))
+	if err != nil {
+		return nil, errors.New("invalid ENV format")
 	}
+	cfg := Config{os.Getenv("BOT_TOKEN"), os.Getenv("DB_PATH"), int64(AdminChatId)}
 	return &cfg, nil
 }
