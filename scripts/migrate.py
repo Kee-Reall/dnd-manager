@@ -19,16 +19,13 @@ def main():
 
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     base_name = f"{timestamp}_{migration_name}"
-    up_file = f"{base_name}.up.sql"
-    down_file = f"{base_name}.down.sql"
-    files = [up_file, down_file]
+    files = [f"{base_name}.up.sql", f"{base_name}.down.sql"]
 
     for file in files:
-        path=os.path.join(scripts_dir, file)
-        with open(path, 'w') as f:
+        with open(os.path.join(scripts_dir, file), 'w') as f:
             f.write("")
 
-    print(f"{up_file}\n{down_file}\nhas been created in: {scripts_dir}/")
+    print(f"{files[0]}\n{files[1]}\nhas been created in: {scripts_dir}/")
 
 if __name__ == "__main__":
     main()
