@@ -27,6 +27,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if err := sqlite.Migrate(db); err != nil {
+		log.Fatal(err)
+	}
+
 	services, err := service.NewContainer(db, cfg.AdminChatId)
 	if err != nil {
 		log.Fatal(err)

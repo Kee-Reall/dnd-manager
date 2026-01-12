@@ -1,6 +1,8 @@
 package service
 
-import "database/sql"
+import (
+	"Kee-Reall/dnd-manager/internal/storage"
+)
 
 type ContainerProvider interface {
 	Container() *Container
@@ -26,11 +28,7 @@ func (c *Container) UserService() *UserService {
 	return c.userService
 }
 
-type DBProvider interface {
-	GetDB() *sql.DB
-}
-
-func NewContainer(db DBProvider, admChatId int64) (*Container, error) {
+func NewContainer(db storage.DbProvider, admChatId int64) (*Container, error) {
 	sVars, intVars := make(map[string]string), make(map[string]int, 1)
 	intVars[adminChatId] = int(admChatId)
 	c := &Container{
