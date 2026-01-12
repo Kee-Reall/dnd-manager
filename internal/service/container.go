@@ -1,15 +1,40 @@
 package service
 
 import (
-	"database/sql"
+	"Kee-Reall/dnd-manager/internal/storage"
 )
 
-type Container struct{}
-
-type DBProvider interface {
-	GetDB() *sql.DB
+type ContainerProvider interface {
+	Container() *Container
 }
 
-func NewContainer(db DBProvider) (*Container, error) {
-	return &Container{}, nil
+type Container struct {
+	userService *UserService
+	sVars       map[string]string
+	intVars     map[string]int
+}
+
+func (c *Container) iVariable(vName string) (int, bool) {
+	v, ok := c.intVars[vName]
+	return v, ok
+}
+
+func (c *Container) sVariable(vName string) (string, bool) {
+	v, ok := c.sVars[vName]
+	return v, ok
+}
+
+func (c *Container) UserService() *UserService {
+	return c.userService
+}
+
+func NewContainer(db storage.DbProvider, admChatId int64) (*Container, error) {
+	sVars, intVars := make(map[string]string), make(map[string]int, 1)
+	intVars[adminChatId] = int(admChatId)
+	c := &Container{
+		sVars:   sVars,
+		intVars: intVars,
+	}
+	c.userService = newUserService(c)
+	return c, nil
 }

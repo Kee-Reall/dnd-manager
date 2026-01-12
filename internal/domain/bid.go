@@ -1,16 +1,17 @@
 package domain
 
-type Status byte
+type BidStatus byte
 
 const (
-	Pending Status = iota
+	Pending BidStatus = iota
 	Approved
 	Rejected
+	CanceledBid
 )
 
 type Bid struct {
 	Id       string
 	PlayerId string
 	GameId   string
-	Status   Status
+	Status   BidStatus
 }
