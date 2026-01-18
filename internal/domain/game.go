@@ -1,33 +1,35 @@
 package domain
 
-type Edition string
+import "time"
+
+type EditionName string
 
 const (
-	//Игра Соотвествует редакции полность, или вносит незначительные изменения
-	E5 Edition = "5e"
-	E4 Edition = "4e"
-	//эти редакции означают что игра в целом соотвествует одной из Редакций, но есть значительные изменения
-	E5hb Edition = "e5hb"
-	E4hb Edition = "e4hb"
+	//Игра Соотвествует редакции полность, или вносит изменения, но использует значительную базу редакции из Player Handbook
+	E5 EditionName = "5e"
+	E4 EditionName = "4e"
 	// полный кастом. Игра может основываться на какой то из Редакций, но правила изменены колосально
-	Homebrew Edition = "homebrew"
+	// Такая игра не ссылается на общие ресурсы
+	Homebrew EditionName = "homebrew"
 )
+
+type Game struct {
+	Date        time.Time  `json:"date"`
+	Status      GameStatus `json:"status"`
+	Campaign    *Campaign  `json:"-"`
+	Description string     `json:"message"`
+}
+
+type Edition struct {
+	Name EditionName
+	Id   string
+}
 
 type GameStatus byte
 
 const (
-	Prepared byte = iota
-	InProgress
-	Finished
+	PlanedGame byte = iota
+	InProgressGame
+	FinishedGame
 	CanceledGame
-	Paused
 )
-
-type Game struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	MasterId    string   `json:"masterId"`
-	Edition     string   `json:"edition"`
-	Players     []string `json:"players"`
-}
