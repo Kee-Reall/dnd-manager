@@ -1,5 +1,6 @@
 package service
 
 const (
-	adminChatId string = "adminChatId"
+	AdminChatId string = "adminChatId"
+	RegEnable   string = "regEnable"
 )

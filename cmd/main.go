@@ -17,11 +17,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	botAPI, err := tgbotapi.NewBotAPI(cfg.BotToken)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	db, err := sqlite.New(cfg.DBPath)
 	if err != nil {
 		log.Fatal(err)
@@ -31,7 +26,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	services, err := service.NewContainer(db, cfg.AdminChatId)
+	services, err := service.NewContainer(db, cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	botAPI, err := tgbotapi.NewBotAPI(cfg.BotToken)
 	if err != nil {
 		log.Fatal(err)
 	}

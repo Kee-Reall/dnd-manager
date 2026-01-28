@@ -3,6 +3,7 @@ package bot
 import (
 	"Kee-Reall/dnd-manager/internal/domain"
 	"Kee-Reall/dnd-manager/internal/service"
+	"errors"
 	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -12,6 +13,12 @@ import (
 /*type ServiceProvider interface {
 
 }*/
+
+type Context struct {
+	update *tgbotapi.Update
+	sender *tgbotapi.User
+	role   domain.Role
+}
 
 type Controller struct {
 	provider *service.Container
@@ -47,6 +54,26 @@ func (c *Controller) UnknownCMD(u tgbotapi.Update) tgbotapi.MessageConfig {
 
 func (c *Controller) StartCMD(u tgbotapi.Update) tgbotapi.MessageConfig {
 	msg := tgbotapi.NewMessage(u.Message.Chat.ID, "круто")
-	msg.ReplyMarkup = PlayerMarkup()
+	msg.ReplyMarkup = StartMarkup()
 	return msg
+}
+
+func (c *Controller) Registry(ctx *Context) tgbotapi.MessageConfig {
+	v, ok := c.provider.BVariable(service.RegEnable)
+	if !ok || !v {
+		_, err := c.provider.UserService().UserByMarker(&domain.UserMarker{strconv.Itoa(int(ctx.sender.ID)), "tg"})
+		if errors.Is(err, domain.DoesNotExistsException) {
+			return tgbotapi.NewMessage(ctx.sender.ID, "Это частный бот. доступ запрещён")
+		}
+		return tgbotapi.NewMessage(ctx.sender.ID, "Ожидайте расмотрения от администрации")
+	}
+
+	err := c.provider.UserService().RegisterNewUserByTag(strconv.Itoa(int(ctx.sender.ID)), ctx.sender.UserName)
+	if err != nil {
+		if errors.Is(err, domain.NotAllowedException) {
+			return tgbotapi.NewMessage(ctx.sender.ID, "Ожидайте расмотрения от администрации")
+		}
+		return tgbotapi.NewMessage(ctx.sender.ID, "Что то пошло не так, попробуйте позже")
+	}
+	return tgbotapi.NewMessage(ctx.sender.ID, "Ваша заявка принята к расмотрению")
 }

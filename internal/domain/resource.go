@@ -3,8 +3,8 @@ package domain
 type ResourceScope byte
 
 const (
-	ScopeGlobal ResourceScope = iota
-	ScopeGame
+	ScopeEdition ResourceScope = iota
+	ScopeCampaign
 )
 
 type Resource struct {

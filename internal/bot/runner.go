@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"Kee-Reall/dnd-manager/internal/domain"
 	"Kee-Reall/dnd-manager/internal/service"
 	"fmt"
 	"log"
@@ -30,21 +31,27 @@ func (r *Runner) Start() {
 
 func (r *Runner) Run() {
 	for u := range r.controller.bot.GetUpdatesChan(tgbotapi.NewUpdate(0)) {
-		var from tgbotapi.User
+
+		ctx := Context{}
+		ctx.update = &u
+
 		if u.Message != nil {
-			from = *u.Message.From
+			ctx.sender = u.Message.From
 		} else {
-			from = *u.CallbackQuery.From
+			ctx.sender = u.CallbackQuery.From
 		}
 
-		pass, role := r.controller.ShouldPassAs(from)
-
+		pass, role := r.controller.ShouldPassAs(*ctx.sender)
+		ctx.role = role
 		if !pass {
-			r.Reply(tgbotapi.NewMessage(from.ID, "Это частный бот, доступ запрещён"))
+			r.Reply(r.controller.Registry(&ctx))
 			continue
 		}
 
-		fmt.Printf("passing is %t, with role %s\n", pass, role.String())
+		if role == domain.NoRole {
+			r.Reply(tgbotapi.NewMessage(ctx.sender.ID, "ожидайте подтверждения"))
+			continue
+		}
 
 		if u.Message != nil { // хендлим команды
 			r.HandleMessage(u)
@@ -65,6 +72,8 @@ func (r *Runner) Reply(m tgbotapi.Chattable) {
 }
 
 func (r *Runner) HandleQuery(update tgbotapi.Update) {
+	cmd := update.CallbackQuery.Data
+	fmt.Println(cmd)
 	r.Reply(r.controller.UnknownQuery(update))
 }
 
