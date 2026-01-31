@@ -17,23 +17,24 @@ func (us *UserService) RegisterNewUserByTag(tgId, name string) error {
 	um := &domain.UserMarker{tgId, "tg"}
 	dbUser, err := us.Container().repo.UserByMarker(um)
 
-	if err != nil && !errors.Is(err, domain.DoesNotExistsException) {
+	var user *domain.User = nil
+	switch {
+	case err == nil:
+		if dbUser.Role == domain.NoRole {
+			return domain.NotAllowedException
+		}
+		return domain.UnknownException
+	case errors.Is(err, domain.DoesNotExistsException):
+		if user, err = us.Container().repo.NewUser(um, name); err != nil {
+			return err
+		}
+	default:
 		return err
 	}
 
-	if errors.Is(err, domain.DoesNotExistsException) {
-		if _, err := us.Container().repo.NewUser(um, name); err != nil {
-			return err
-		}
+	us.Container().EventBus.Publish(*user, "new-user-reg")
 
-		return nil
-	}
-
-	if dbUser.Role == domain.NoRole {
-		return domain.NotAllowedException
-	}
-
-	return domain.UnknownException
+	return nil
 
 }
 

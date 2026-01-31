@@ -1,4 +1,4 @@
-package service
+package config
 
 const (
 	AdminChatId string = "adminChatId"

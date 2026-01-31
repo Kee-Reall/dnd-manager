@@ -16,6 +16,7 @@ type UserByMarkerProvider interface {
 
 type Container struct {
 	userService *UserService
+	EventBus    *EventBus
 	sVars       map[string]string
 	intVars     map[string]int
 	boolVars    map[string]bool
@@ -43,8 +44,8 @@ func (c *Container) UserService() *UserService {
 
 func NewContainer(repo *sqlite.Repository, cfg *config.Config) (*Container, error) {
 	sVars, intVars, bVars := make(map[string]string), make(map[string]int, 1), make(map[string]bool, 1)
-	intVars[AdminChatId] = int(cfg.AdminChatId)
-	bVars[RegEnable] = cfg.RegEnable
+	intVars[config.AdminChatId] = int(cfg.AdminChatId)
+	bVars[config.RegEnable] = cfg.RegEnable
 	c := &Container{
 		sVars:    sVars,
 		intVars:  intVars,
@@ -52,5 +53,6 @@ func NewContainer(repo *sqlite.Repository, cfg *config.Config) (*Container, erro
 		repo:     repo,
 	}
 	c.userService = newUserService(c)
+	c.EventBus = newEventBus()
 	return c, nil
 }

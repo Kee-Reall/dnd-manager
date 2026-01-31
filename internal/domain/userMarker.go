@@ -16,3 +16,7 @@ func (um *UserMarker) IdInInt64() (int64, bool) {
 	}
 	return int64(intId), true
 }
+
+func (um *UserMarker) IdString() (string, bool) {
+	return um.ID, true
+}
