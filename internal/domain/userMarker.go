@@ -12,7 +12,7 @@ type UserMarker struct {
 func (um *UserMarker) IdInInt64() (int64, bool) {
 	intId, err := strconv.Atoi(um.ID)
 	if err != nil {
-		return *new(int64), false
+		return 0, false
 	}
 	return int64(intId), true
 }

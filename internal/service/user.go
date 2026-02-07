@@ -2,11 +2,20 @@ package service
 
 import (
 	"Kee-Reall/dnd-manager/internal/domain"
+	"Kee-Reall/dnd-manager/internal/shared"
+	"Kee-Reall/dnd-manager/internal/storage/sqlite"
 	"errors"
+	"strconv"
 )
+
+type Publisher interface {
+	Publish(any, string)
+}
 
 type UserService struct {
 	containerPtr *Container
+	repo         *sqlite.Repository
+	bus          Publisher
 }
 
 func (us *UserService) Container() *Container {
@@ -15,17 +24,17 @@ func (us *UserService) Container() *Container {
 
 func (us *UserService) RegisterNewUserByTag(tgId, name string) error {
 	um := &domain.UserMarker{tgId, "tg"}
-	dbUser, err := us.Container().repo.UserByMarker(um)
+	dbUser, err := us.repo.UserByMarker(um)
 
 	var user *domain.User = nil
 	switch {
 	case err == nil:
 		if dbUser.Role == domain.NoRole {
-			return domain.NotAllowedException
+			return shared.NotAllowedException
 		}
-		return domain.UnknownException
-	case errors.Is(err, domain.DoesNotExistsException):
-		if user, err = us.Container().repo.NewUser(um, name); err != nil {
+		return shared.UnknownException
+	case errors.Is(err, shared.DoesNotExistsException):
+		if user, err = us.repo.NewUser(um, name); err != nil {
 			return err
 		}
 	default:
@@ -38,31 +47,66 @@ func (us *UserService) RegisterNewUserByTag(tgId, name string) error {
 
 }
 
-func (us *UserService) UserByMarker(m *domain.UserMarker) (*domain.User, error) {
-	if m == nil {
-		return nil, domain.InvalidArgumentException
+func (us *UserService) AcceptUser(id string) error {
+	u, err := us.repo.UserByIdString(id)
+	if err != nil {
+		return shared.InvalidDataException
+	}
+	if u.Role != domain.NoRole {
+		if u.Role == domain.PlayerRole {
+			return shared.ScenarioAlreadyDoneException
+		}
+		return shared.NotAllowedException //уже подвержден
+	}
+	if err := us.repo.SetUserRoleByIdString(id, domain.PlayerRole); err != nil {
+		return err
 	}
 
-	return us.Container().repo.UserByMarker(m)
+	us.Container().EventBus.Publish(*u, "user-accepted")
+
+	return nil
 }
 
-func (us *UserService) AccessAndRoleByMarker(m domain.UserMarker) (bool, domain.Role) {
+func (us *UserService) UserByMarker(m *domain.UserMarker) (*domain.User, error) {
+	if m == nil {
+		return nil, shared.InvalidArgumentException
+	}
+
+	return us.repo.UserByMarker(m)
+}
+
+func (us *UserService) AccessAndRoleByMarker(m *domain.UserMarker) (bool, *domain.User) {
 	id64, ok := m.IdInInt64()
 	if !ok {
-		return false, domain.NoRole
+		return false, nil
 	}
 
-	chatId, ok := us.Container().IVariable("adminChatId")
+	adminChatId, ok := us.Container().IVariable("adminChatId")
 	if !ok {
-		return false, domain.NoRole
+		return false, nil
 	}
 
-	if int64(chatId) == id64 {
-		return true, domain.AdminRole
+	if int64(adminChatId) == id64 {
+		return true, &domain.User{
+			ID:     "0",
+			Name:   "GOD",
+			Role:   domain.AdminRole,
+			Marker: domain.UserMarker{strconv.Itoa(adminChatId), "tg"},
+		}
 	}
-	return false, domain.NoRole
+
+	user, err := us.repo.UserByMarker(m)
+	if err != nil {
+		return false, nil
+	}
+
+	if user != nil && user.Role != domain.AdminRole {
+		return true, user
+	}
+
+	return false, nil
 }
 
 func newUserService(cptr *Container) *UserService {
-	return &UserService{cptr}
+	return &UserService{cptr, cptr.repo, cptr.EventBus}
 }

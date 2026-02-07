@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-type HandleFunc func(any, string) error
+type HandleFunc func(any) error
 
 type EventBus struct {
 	locker      sync.Locker
@@ -29,7 +29,7 @@ func (b *EventBus) Publish(payload any, name string) {
 
 	errs := make([]error, 0, len(cbs))
 	for _, callback := range cbs {
-		if err := callback(payload, name); err != nil {
+		if err := callback(payload); err != nil {
 			errs = append(errs, err)
 		}
 	}

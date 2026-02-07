@@ -4,6 +4,7 @@ import (
 	"Kee-Reall/dnd-manager/internal/config"
 	"Kee-Reall/dnd-manager/internal/domain"
 	"Kee-Reall/dnd-manager/internal/service"
+	"Kee-Reall/dnd-manager/internal/shared"
 	"errors"
 	"fmt"
 	"log"
@@ -15,7 +16,7 @@ import (
 type Context struct {
 	update *tgbotapi.Update
 	sender *tgbotapi.User
-	role   domain.Role
+	user   *domain.User
 }
 
 type IdProvider interface {
@@ -35,16 +36,27 @@ func NewController(provider *service.Container, bot *tgbotapi.BotAPI) *Controlle
 
 	c.CmdList = make(map[string]func(ctx Context) tgbotapi.MessageConfig)
 	c.CmdList["start"] = c.StartCMD
+	c.CmdList["master"] = c.MasterKeyboardInit
 
 	c.CbList = make(map[string]func(Context, []string) tgbotapi.MessageConfig)
 	c.CbList["accept-reg"] = c.AcceptReg
+	//c.CbList["master-campaign-create"] = c.CreateCampaign
 
-	c.container.EventBus.Subscribe("new-user-reg", func(payload any, event string) error {
+	c.container.EventBus.Subscribe("new-user-reg", func(payload any) error {
 		m, ok := payload.(domain.User)
 		if !ok {
-			return errors.New("Can't cast payload to userMarker")
+			return errors.New("Can't cast payload to user")
 		}
-		go c.NotifyAdminReg(m)
+		go c.notifyAdminReg(m)
+		return nil
+	})
+
+	c.container.EventBus.Subscribe("user-accepted", func(payload any) error {
+		m, ok := payload.(domain.User)
+		if !ok {
+			return errors.New("Can't cast payload to user")
+		}
+		go c.notifyUserRegAccepted(m)
 		return nil
 	})
 
@@ -53,16 +65,42 @@ func NewController(provider *service.Container, bot *tgbotapi.BotAPI) *Controlle
 
 func (c *Controller) AcceptReg(ctx Context, args []string) tgbotapi.MessageConfig {
 	adminChatId, ok := c.container.IVariable(config.AdminChatId)
-	if !ok {
-		return nil
+	if args == nil || len(args) != 1 || !ok || adminChatId != int(ctx.sender.ID) || ctx.user.Role != domain.AdminRole {
+		return c.UnknownQuery(*ctx.update)
 	}
-	ctx.sender.ID !== c.container.IVariable(config.AdminChatId)
-	if ctx.role != domain.AdminRole {
-
+	id := args[0]
+	err := c.container.UserService().AcceptUser(id)
+	if err != nil {
+		if errors.Is(err, shared.ScenarioAlreadyDoneException) {
+			return tgbotapi.NewMessage(int64(adminChatId), "Пользователь уже подтверждён")
+		}
+		return tgbotapi.NewMessage(int64(adminChatId), "Что то пошло не так "+err.Error())
 	}
+	return tgbotapi.NewMessage(int64(adminChatId), "Пользователь подтверждён")
 }
 
-func (c *Controller) NotifyAdminReg(du domain.User) {
+func (c *Controller) notifyUserRegAccepted(du domain.User) {
+	chatId, ok := du.Marker.IdInInt64()
+	if !ok {
+		return
+	}
+	c.Reply(tgbotapi.NewMessage(chatId, "Ваша регистрация подтверждена"))
+}
+
+/*
+func (c *Controller) CreateCampaign(ctx Context) tgbotapi.MessageConfig {
+
+}
+
+*/
+
+func (c *Controller) MasterKeyboardInit(ctx Context) tgbotapi.MessageConfig {
+	msg := tgbotapi.NewMessage(ctx.sender.ID, "МАСТЕР В ЗДАНИИ")
+	msg.ReplyMarkup = masterStartMarkup()
+	return msg
+}
+
+func (c *Controller) notifyAdminReg(du domain.User) {
 	chatId, ok := c.container.IVariable(config.AdminChatId)
 	if !ok {
 		return
@@ -76,22 +114,27 @@ func (c *Controller) NotifyAdminReg(du domain.User) {
 		fmt.Sprintf("<b>Новая заявка</b>\n <b>от пользователя %s</b>\n<a href='tg://user?id=%d'>профиль</a>", du.Name, uIdI64),
 	)
 	msg.ParseMode = "HTML"
-	msg.ReplyMarkup = AdminConfirmMarkup(du.ID)
+	msg.ReplyMarkup = adminConfirmMarkup(du.ID)
 	c.Reply(msg)
 }
 
 func (r *Controller) Reply(m tgbotapi.Chattable) {
-	_, err := r.bot.Send(m)
-	defer func(e error) {
+	defer func() {
+		e := recover()
 		if e != nil {
-			log.Println(e.Error())
+			log.Println(e)
 		}
-	}(err)
+	}()
+
+	_, err := r.bot.Send(m)
+	if err != nil {
+		log.Println(err.Error())
+	}
 	return
 }
 
-func (c *Controller) ShouldPassAs(user tgbotapi.User) (bool, domain.Role) {
-	marker := domain.UserMarker{ID: strconv.Itoa(int(user.ID)), Tag: "tg"}
+func (c *Controller) ShouldPassAs(user tgbotapi.User) (bool, *domain.User) {
+	marker := &domain.UserMarker{ID: strconv.Itoa(int(user.ID)), Tag: "tg"}
 	s := c.container.UserService()
 	return s.AccessAndRoleByMarker(marker)
 }
@@ -110,7 +153,7 @@ func (c *Controller) UnknownCMD(u tgbotapi.Update) tgbotapi.MessageConfig {
 
 func (c *Controller) StartCMD(ctx Context) tgbotapi.MessageConfig {
 	msg := tgbotapi.NewMessage(ctx.sender.ID, "круто")
-	msg.ReplyMarkup = StartMarkup()
+	msg.ReplyMarkup = startMarkup()
 	return msg
 }
 
@@ -118,7 +161,7 @@ func (c *Controller) Registry(ctx *Context) tgbotapi.MessageConfig {
 	v, ok := c.container.BVariable(config.RegEnable)
 	if !ok || !v {
 		_, err := c.container.UserService().UserByMarker(&domain.UserMarker{strconv.Itoa(int(ctx.sender.ID)), "tg"})
-		if errors.Is(err, domain.DoesNotExistsException) {
+		if errors.Is(err, shared.DoesNotExistsException) {
 			return tgbotapi.NewMessage(ctx.sender.ID, "Это частный бот. доступ запрещён")
 		}
 		return tgbotapi.NewMessage(ctx.sender.ID, "Ожидайте расмотрения от администрации")
@@ -126,7 +169,7 @@ func (c *Controller) Registry(ctx *Context) tgbotapi.MessageConfig {
 
 	err := c.container.UserService().RegisterNewUserByTag(strconv.Itoa(int(ctx.sender.ID)), ctx.sender.UserName)
 	if err != nil {
-		if errors.Is(err, domain.NotAllowedException) {
+		if errors.Is(err, shared.NotAllowedException) {
 			return tgbotapi.NewMessage(ctx.sender.ID, "Ожидайте расмотрения от администрации")
 		}
 		return tgbotapi.NewMessage(ctx.sender.ID, "Что то пошло не так, попробуйте позже")

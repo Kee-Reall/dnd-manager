@@ -35,14 +35,14 @@ func (r *Runner) Run() {
 			ctx.sender = u.CallbackQuery.From
 		}
 
-		pass, role := r.controller.ShouldPassAs(*ctx.sender)
-		ctx.role = role
+		pass, user := r.controller.ShouldPassAs(*ctx.sender)
+		ctx.user = user
 		if !pass {
 			go r.controller.Reply(r.controller.Registry(&ctx))
 			continue
 		}
 
-		if role == domain.NoRole {
+		if user.Role == domain.NoRole {
 			go r.controller.Reply(tgbotapi.NewMessage(ctx.sender.ID, "ожидайте подтверждения"))
 			continue
 		}
@@ -81,6 +81,7 @@ func (r *Runner) HandleQuery(ctx Context) {
 }
 
 func (r *Runner) HandleMessage(ctx Context) {
+
 	if !ctx.update.Message.IsCommand() {
 		go r.controller.Reply(r.controller.IDK(*ctx.update))
 		return
