@@ -1,21 +1,16 @@
 package bot
 
 import (
+	"Kee-Reall/dnd-manager/internal/domain"
 	"Kee-Reall/dnd-manager/internal/service"
-	"fmt"
-	"log"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func NewRunner(bot *tgbotapi.BotAPI, container *service.Container) (*Runner, error) {
-	return &Runner{NewController(container, bot)}, nil
-}
-
-func postLog(e error) {
-	if e != nil {
-		log.Println(e.Error())
-	}
+	r := &Runner{NewController(container, bot)}
+	return r, nil
 }
 
 type Runner struct {
@@ -30,55 +25,73 @@ func (r *Runner) Start() {
 
 func (r *Runner) Run() {
 	for u := range r.controller.bot.GetUpdatesChan(tgbotapi.NewUpdate(0)) {
-		var from tgbotapi.User
+
+		ctx := Context{}
+		ctx.update = &u
+
 		if u.Message != nil {
-			from = *u.Message.From
+			ctx.sender = u.Message.From
 		} else {
-			from = *u.CallbackQuery.From
+			ctx.sender = u.CallbackQuery.From
 		}
 
-		pass, role := r.controller.ShouldPassAs(from)
-
+		pass, user := r.controller.ShouldPassAs(*ctx.sender)
+		ctx.user = user
 		if !pass {
-			r.Reply(tgbotapi.NewMessage(from.ID, "Это частный бот, доступ запрещён"))
+			go r.controller.Reply(r.controller.Registry(&ctx))
 			continue
 		}
 
-		fmt.Printf("passing is %t, with role %s\n", pass, role.String())
+		if user.Role == domain.NoRole {
+			go r.controller.Reply(tgbotapi.NewMessage(ctx.sender.ID, "ожидайте подтверждения"))
+			continue
+		}
 
 		if u.Message != nil { // хендлим команды
-			r.HandleMessage(u)
+			go r.HandleMessage(ctx)
 			continue
 		}
 
 		if u.CallbackQuery != nil { //  кнопки
-			r.HandleQuery(u)
+			go r.HandleQuery(ctx)
 			continue
 		}
 	}
 }
 
-func (r *Runner) Reply(m tgbotapi.Chattable) {
-	_, err := r.controller.bot.Send(m)
-	defer postLog(err)
-	return
+func parseCallbackQuery(callbackData string) (string, []string) {
+	if callbackData == "" {
+		return "", make([]string, 0, 0)
+	}
+	split := strings.Split(callbackData, "_")
+	for i, v := range split {
+		split[i] = strings.TrimSpace(v)
+	}
+	return split[0], split[1:]
 }
 
-func (r *Runner) HandleQuery(update tgbotapi.Update) {
-	r.Reply(r.controller.UnknownQuery(update))
+func (r *Runner) HandleQuery(ctx Context) {
+	cmd, args := parseCallbackQuery(ctx.update.CallbackQuery.Data)
+	resolver, ok := r.controller.CbList[cmd]
+	if !ok {
+		go r.controller.Reply(r.controller.UnknownQuery(*ctx.update))
+		return
+	}
+	go r.controller.Reply(resolver(ctx, args))
 }
 
-func (r *Runner) HandleMessage(update tgbotapi.Update) {
-	if !update.Message.IsCommand() {
-		r.Reply(r.controller.IDK(update))
+func (r *Runner) HandleMessage(ctx Context) {
+
+	if !ctx.update.Message.IsCommand() {
+		go r.controller.Reply(r.controller.IDK(*ctx.update))
 		return
 	}
 
-	cmd := update.Message.Command()
+	cmd := ctx.update.Message.Command()
 	resolver, ok := r.controller.CmdList[cmd]
 	if !ok {
-		r.Reply(r.controller.UnknownCMD(update))
+		go r.controller.Reply(r.controller.UnknownCMD(*ctx.update))
 		return
 	}
-	r.Reply(resolver(update))
+	go r.controller.Reply(resolver(ctx))
 }
