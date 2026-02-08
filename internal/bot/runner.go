@@ -38,22 +38,30 @@ func (r *Runner) Run() {
 		pass, user := r.controller.ShouldPassAs(*ctx.sender)
 		ctx.user = user
 		if !pass {
-			go r.controller.Reply(r.controller.Registry(&ctx))
+			resolve(func() {
+				r.controller.Reply(r.controller.Registry(&ctx))
+			})
 			continue
 		}
 
 		if user.Role == domain.NoRole {
-			go r.controller.Reply(tgbotapi.NewMessage(ctx.sender.ID, "ожидайте подтверждения"))
+			resolve(func() {
+				r.controller.Reply(tgbotapi.NewMessage(ctx.sender.ID, "ожидайте подтверждения"))
+			})
 			continue
 		}
 
 		if u.Message != nil { // хендлим команды
-			go r.HandleMessage(ctx)
+			resolve(func() {
+				r.HandleMessage(ctx)
+			})
 			continue
 		}
 
 		if u.CallbackQuery != nil { //  кнопки
-			go r.HandleQuery(ctx)
+			resolve(func() {
+				r.HandleQuery(ctx)
+			})
 			continue
 		}
 	}
@@ -72,26 +80,51 @@ func parseCallbackQuery(callbackData string) (string, []string) {
 
 func (r *Runner) HandleQuery(ctx Context) {
 	cmd, args := parseCallbackQuery(ctx.update.CallbackQuery.Data)
-	resolver, ok := r.controller.CbList[cmd]
+	signature, ok := r.controller.CbList[cmd]
 	if !ok {
-		go r.controller.Reply(r.controller.UnknownQuery(*ctx.update))
+		resolve(func() {
+			r.controller.Reply(r.controller.UnknownQuery(ctx))
+		})
 		return
 	}
-	go r.controller.Reply(resolver(ctx, args))
+
+	if !signature.Cred(ctx.user.Role) {
+		resolve(func() {
+			r.controller.Reply(r.controller.NotAllowed(ctx))
+		})
+		return
+	}
+	resolve(func() {
+		r.controller.Reply(signature.resolver(ctx, args))
+	})
 }
 
 func (r *Runner) HandleMessage(ctx Context) {
 
 	if !ctx.update.Message.IsCommand() {
-		go r.controller.Reply(r.controller.IDK(*ctx.update))
+		resolve(func() {
+			r.controller.Reply(r.controller.IDK(ctx))
+		})
 		return
 	}
 
 	cmd := ctx.update.Message.Command()
-	resolver, ok := r.controller.CmdList[cmd]
+	signature, ok := r.controller.CmdList[cmd]
 	if !ok {
-		go r.controller.Reply(r.controller.UnknownCMD(*ctx.update))
+		resolve(func() {
+			r.controller.Reply(r.controller.UnknownCMD(ctx))
+		})
 		return
 	}
-	go r.controller.Reply(resolver(ctx))
+
+	if !signature.Cred(ctx.user.Role) {
+		resolve(func() {
+			r.controller.Reply(r.controller.NotAllowed(ctx))
+		})
+		return
+	}
+
+	resolve(func() {
+		r.controller.Reply(signature.resolver(ctx))
+	})
 }

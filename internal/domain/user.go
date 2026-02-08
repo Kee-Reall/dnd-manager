@@ -4,11 +4,11 @@ type MakerTag string
 type Role byte
 
 const (
-	TG         MakerTag = "tg"
-	NoRole     Role     = 0
-	PlayerRole Role     = 1
-	MasterRole Role     = 2
-	AdminRole  Role     = 3
+	NoRole Role = iota
+	PlayerRole
+	MasterRole
+	AdminRole
+	TG MakerTag = "tg"
 )
 
 func (r Role) String() (roleStr string) {
@@ -23,6 +23,18 @@ func (r Role) String() (roleStr string) {
 		roleStr = "undefined Role"
 	}
 	return
+}
+
+func AllRole() []Role {
+	return []Role{NoRole, PlayerRole, MasterRole, AdminRole}
+}
+
+func MasterFunctionsRole() []Role {
+	return []Role{MasterRole, AdminRole}
+}
+
+func MaxRole() Role {
+	return AdminRole
 }
 
 type User struct {

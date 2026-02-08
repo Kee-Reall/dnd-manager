@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -19,6 +20,27 @@ type Context struct {
 	user   *domain.User
 }
 
+type MethodSignature[T func(Context) tgbotapi.MessageConfig | func(Context, []string) tgbotapi.MessageConfig] struct {
+	resolver T
+	rights   []domain.Role
+}
+
+func resolve(cb func()) {
+	go func() {
+		defer func() {
+			err := recover()
+			if err != nil {
+				log.Println(err)
+			}
+		}()
+		cb()
+	}()
+}
+
+func (ms *MethodSignature[T]) Cred(role domain.Role) bool {
+	return !(role > domain.MaxRole()) && slices.Contains(ms.rights, role)
+}
+
 type IdProvider interface {
 	IdInInt64() (int64, bool)
 	IdString() (string, bool)
@@ -27,19 +49,31 @@ type IdProvider interface {
 type Controller struct {
 	container *service.Container
 	bot       *tgbotapi.BotAPI
-	CmdList   map[string]func(Context) tgbotapi.MessageConfig
-	CbList    map[string]func(Context, []string) tgbotapi.MessageConfig
+	CmdList   map[string]MethodSignature[func(Context) tgbotapi.MessageConfig]
+	CbList    map[string]MethodSignature[func(Context, []string) tgbotapi.MessageConfig]
 }
 
 func NewController(provider *service.Container, bot *tgbotapi.BotAPI) *Controller {
 	c := &Controller{container: provider, bot: bot}
 
-	c.CmdList = make(map[string]func(ctx Context) tgbotapi.MessageConfig)
-	c.CmdList["start"] = c.StartCMD
-	c.CmdList["master"] = c.MasterKeyboardInit
+	c.CmdList = make(map[string]MethodSignature[func(Context) tgbotapi.MessageConfig])
 
-	c.CbList = make(map[string]func(Context, []string) tgbotapi.MessageConfig)
-	c.CbList["accept-reg"] = c.AcceptReg
+	c.CmdList["start"] = MethodSignature[func(Context) tgbotapi.MessageConfig]{
+		c.StartCMD,
+		domain.AllRole(),
+	}
+
+	c.CmdList["master"] = MethodSignature[func(Context) tgbotapi.MessageConfig]{
+		c.MasterKeyboardInit,
+		domain.MasterFunctionsRole(),
+	}
+
+	c.CbList = make(map[string]MethodSignature[func(Context, []string) tgbotapi.MessageConfig])
+	c.CbList["accept-reg"] = MethodSignature[func(Context, []string) tgbotapi.MessageConfig]{
+		c.AcceptReg,
+		[]domain.Role{domain.AdminRole},
+	}
+
 	//c.CbList["master-campaign-create"] = c.CreateCampaign
 
 	c.container.EventBus.Subscribe("new-user-reg", func(payload any) error {
@@ -65,8 +99,8 @@ func NewController(provider *service.Container, bot *tgbotapi.BotAPI) *Controlle
 
 func (c *Controller) AcceptReg(ctx Context, args []string) tgbotapi.MessageConfig {
 	adminChatId, ok := c.container.IVariable(config.AdminChatId)
-	if args == nil || len(args) != 1 || !ok || adminChatId != int(ctx.sender.ID) || ctx.user.Role != domain.AdminRole {
-		return c.UnknownQuery(*ctx.update)
+	if args == nil || len(args) != 1 || !ok || adminChatId != int(ctx.sender.ID) {
+		return c.UnknownQuery(ctx)
 	}
 	id := args[0]
 	err := c.container.UserService().AcceptUser(id)
@@ -139,22 +173,26 @@ func (c *Controller) ShouldPassAs(user tgbotapi.User) (bool, *domain.User) {
 	return s.AccessAndRoleByMarker(marker)
 }
 
-func (c *Controller) IDK(u tgbotapi.Update) tgbotapi.MessageConfig {
-	return tgbotapi.NewMessage(u.Message.Chat.ID, "Не понимаю, что вы имеете ввиду")
+func (c *Controller) IDK(ctx Context) tgbotapi.MessageConfig {
+	return tgbotapi.NewMessage(ctx.sender.ID, "Не понимаю, что вы имеете ввиду")
 }
 
-func (c *Controller) UnknownQuery(u tgbotapi.Update) tgbotapi.MessageConfig {
-	return tgbotapi.NewMessage(u.CallbackQuery.From.ID, "неизвестный запрос")
+func (c *Controller) UnknownQuery(ctx Context) tgbotapi.MessageConfig {
+	return tgbotapi.NewMessage(ctx.sender.ID, "неизвестный запрос")
 }
 
-func (c *Controller) UnknownCMD(u tgbotapi.Update) tgbotapi.MessageConfig {
-	return tgbotapi.NewMessage(u.Message.Chat.ID, "Нераспознанная команда")
+func (c *Controller) UnknownCMD(ctx Context) tgbotapi.MessageConfig {
+	return tgbotapi.NewMessage(ctx.sender.ID, "Нераспознанная команда")
 }
 
 func (c *Controller) StartCMD(ctx Context) tgbotapi.MessageConfig {
 	msg := tgbotapi.NewMessage(ctx.sender.ID, "круто")
 	msg.ReplyMarkup = startMarkup()
 	return msg
+}
+
+func (c *Controller) NotAllowed(ctx Context) tgbotapi.MessageConfig {
+	return tgbotapi.NewMessage(ctx.sender.ID, "Вам запрещенно это действие")
 }
 
 func (c *Controller) Registry(ctx *Context) tgbotapi.MessageConfig {
