@@ -3,10 +3,23 @@ package bot
 import (
 	"Kee-Reall/dnd-manager/internal/domain"
 	"Kee-Reall/dnd-manager/internal/service"
+	"log"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+func resolve(cb func()) {
+	go func() {
+		defer func() {
+			err := recover()
+			if err != nil {
+				log.Println(err)
+			}
+		}()
+		cb()
+	}()
+}
 
 func NewRunner(bot *tgbotapi.BotAPI, container *service.Container) (*Runner, error) {
 	r := &Runner{NewController(container, bot)}

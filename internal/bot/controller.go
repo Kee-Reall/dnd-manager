@@ -25,18 +25,6 @@ type MethodSignature[T func(Context) tgbotapi.MessageConfig | func(Context, []st
 	rights   []domain.Role
 }
 
-func resolve(cb func()) {
-	go func() {
-		defer func() {
-			err := recover()
-			if err != nil {
-				log.Println(err)
-			}
-		}()
-		cb()
-	}()
-}
-
 func (ms *MethodSignature[T]) Cred(role domain.Role) bool {
 	return !(role > domain.MaxRole()) && slices.Contains(ms.rights, role)
 }
